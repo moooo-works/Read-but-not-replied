@@ -38,7 +38,7 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
         if (settingsRepository.isExcluded(sbn.packageName)) return
 
         if (!burstFilter.shouldProcess(sbn.key, sbn.id, sbn.tag, sbn.postTime)) {
-            Log.d("NotiReply", "Burst suppressed for ${sbn.packageName}")
+            // Burst suppressed; log removed to protect PII
             return
         }
 
@@ -74,6 +74,8 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         activeReplyMap.remove(sbn.key)
+
+        if (settingsRepository.isExcluded(sbn.packageName)) return
 
         serviceScope.launch {
             try {
