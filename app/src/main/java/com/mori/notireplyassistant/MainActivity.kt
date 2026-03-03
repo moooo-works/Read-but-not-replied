@@ -15,6 +15,7 @@ import androidx.navigation.navArgument
 import com.mori.notireplyassistant.feature.conversation.ConversationDetailScreen
 import com.mori.notireplyassistant.feature.inbox.InboxScreen
 import com.mori.notireplyassistant.feature.settings.SettingsScreen
+import com.mori.notireplyassistant.feature.settings.excluded.ExcludedAppsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -50,6 +51,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("settings") {
                             SettingsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onNavigateToExcludedApps = { navController.navigate("excludedApps") }
+                            )
+                        }
+                        composable("excludedApps") {
+                            ExcludedAppsScreen(
                                 onNavigateBack = { navController.popBackStack() }
                             )
                         }

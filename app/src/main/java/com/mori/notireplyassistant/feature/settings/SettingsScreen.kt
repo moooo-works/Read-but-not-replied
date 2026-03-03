@@ -5,29 +5,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToExcludedApps: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val scope = rememberCoroutineScope()
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        // Using Default ArrowBack for MVP
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -35,6 +32,13 @@ fun SettingsScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
+            ListItem(
+                modifier = Modifier.clickable { onNavigateToExcludedApps() },
+                headlineContent = { Text("Excluded Apps") },
+                supportingContent = { Text("Manage apps to ignore notifications from") },
+                leadingContent = { Icon(Icons.Default.Block, contentDescription = null) }
+            )
+            Divider()
             ListItem(
                 modifier = Modifier.clickable {
                     viewModel.clearData()
