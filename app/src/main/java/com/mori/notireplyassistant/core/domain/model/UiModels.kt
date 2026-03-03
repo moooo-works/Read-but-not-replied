@@ -1,0 +1,21 @@
+package com.mori.notireplyassistant.core.domain.model
+
+data class ConversationUiModel(
+    val conversationId: String,
+    val packageName: String,
+    val title: String,
+    val preview: String,
+    val timestamp: Long,
+    val pendingCount: Int,
+    val isArchived: Boolean,
+    val isPinned: Boolean,
+    val hasPendingReminder: Boolean = false // Populated later if needed
+)
+
+data class MessageUiModel(
+    val messageId: String,
+    val sender: String,
+    val text: String,
+    val timestamp: Long,
+    val isMe: Boolean // Inferred from sender == "Me" or specific logic
+)
