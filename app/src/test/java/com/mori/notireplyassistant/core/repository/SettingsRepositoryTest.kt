@@ -5,7 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import com.mori.notireplyassistant.core.datastore.SettingsDataStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -29,7 +29,6 @@ class SettingsRepositoryTest {
     private lateinit var dataStore: DataStore<Preferences>
     private lateinit var settingsDataStore: SettingsDataStore
 
-    // We cannot create repository in @Before because we need backgroundScope from runTest
     private val testDispatcher = StandardTestDispatcher()
     private val testScope = TestScope(testDispatcher)
 
@@ -44,8 +43,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun defaultExcludedPackages_isEmpty() = runTest(testDispatcher) {
+    fun isExcluded_returnsTrueBeforeReady() = testScope.runTest {
         val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
+
+        // Before advancing time, the DataStore load hasn't completed and emitted.
+        // Therefore isReady is still false, and isExcluded should conservatively return true.
+        assertFalse(repository.isReady.value)
+        assertTrue("Should conservatively exclude before ready", repository.isExcluded("com.test"))
+    }
+
+    @Test
+    fun defaultExcludedPackages_isEmpty() = testScope.runTest {
+        val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
+
+        // Wait until DataStore is loaded and sets isReady = true
+        repository.isReady.first { it }
 
         val current = repository.excludedPackagesFlow.value
         assertTrue(current.isEmpty())
@@ -53,8 +65,9 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun addExcludedPackage_updatesFlowAndCache() = runTest(testDispatcher) {
+    fun addExcludedPackage_updatesFlowAndCache() = testScope.runTest {
         val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
+        repository.isReady.first { it }
 
         repository.setExcluded("com.example.app", true)
         testScheduler.advanceUntilIdle() // Wait for flow updates
@@ -65,8 +78,9 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun removeExcludedPackage_updatesFlowAndCache() = runTest(testDispatcher) {
+    fun removeExcludedPackage_updatesFlowAndCache() = testScope.runTest {
         val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
+        repository.isReady.first { it }
 
         repository.setExcluded("com.example.app", true)
         testScheduler.advanceUntilIdle()
@@ -80,8 +94,9 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun clearAllExcluded_clearsSet() = runTest(testDispatcher) {
+    fun clearAllExcluded_clearsSet() = testScope.runTest {
         val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
+        repository.isReady.first { it }
 
         repository.setExcluded("com.app1", true)
         repository.setExcluded("com.app2", true)
