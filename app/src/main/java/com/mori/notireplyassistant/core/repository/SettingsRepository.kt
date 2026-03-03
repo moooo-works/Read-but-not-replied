@@ -30,7 +30,7 @@ class SettingsRepository @Inject constructor(
 
     fun isExcluded(packageName: String): Boolean {
         // If not ready yet, return true (conservative: ignore)
-        if (!isReady) return true
+        if (!isReady) return false
         return excludedPackagesFlow.value.contains(packageName)
     }
 

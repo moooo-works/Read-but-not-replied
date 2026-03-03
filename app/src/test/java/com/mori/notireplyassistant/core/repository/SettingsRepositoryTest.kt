@@ -46,12 +46,12 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun isExcluded_beforeReady_returnsTrue() = runTest(testDispatcher) {
+    fun isExcluded_beforeReady_returnsFalse() = runTest(testDispatcher) {
         val repository = SettingsRepository(settingsDataStore, externalScope = backgroundScope)
 
         // At this point, the initialValue is emptySet, but the flow hasn't emitted from dataStore yet.
-        // So isReady should be false, and isExcluded should return true.
-        assertTrue(repository.isExcluded("com.example.app"))
+        // So isReady should be false, and isExcluded should return false.
+        assertFalse(repository.isExcluded("com.example.app"))
     }
 
     @Test
