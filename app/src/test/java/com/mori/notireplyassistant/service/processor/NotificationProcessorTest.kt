@@ -70,7 +70,7 @@ class NotificationProcessorTest {
         assertEquals("Content", conv?.lastMessagePreview)
 
         // Expected Message ID
-        val msgId = MessageIdGenerator.generate("com.pkg", convId, "Sender", "Hello", 1000)
+        val msgId = MessageIdGenerator.generate("com.pkg", convId, "Sender", "Hello", 1000, "key1", 0)
         val storedMsg = db.messageDao().getMessageById(msgId)
         assertNotNull(storedMsg)
     }
@@ -101,10 +101,42 @@ class NotificationProcessorTest {
         var conv = db.conversationDao().getConversationById(convId)
         assertEquals(1, conv?.pendingCount)
 
-        // Second process (same exact event/message)
+        // Second process (same exact event/message) immediately
         processor.processNotification(event)
         conv = db.conversationDao().getConversationById(convId)
-        assertEquals(1, conv?.pendingCount) // Should still be 1
+        assertEquals(1, conv?.pendingCount) // Should still be 1 due to short window suppression
+
+        // Since we suppressed it entirely, there should be no additional message row check needed,
+        // but just in case, we can verify raw notification count or message count.
+    }
+
+    @Test
+    fun processNotification_messageWithZeroTimestamp_generatesStableId() = runBlocking {
+        val msg = MessageData("Sender", "Hello", 0)
+        val event = NotificationEvent(
+            sbnKey = "key1",
+            packageName = "com.pkg",
+            notificationId = 1,
+            tag = null,
+            postTime = 1000,
+            title = "Title",
+            content = "Hello",
+            groupKey = null,
+            category = "msg",
+            isGroup = false,
+            styleType = "MessagingStyle",
+            styleMetadata = "{}",
+            hasRemoteInput = true,
+            messages = listOf(msg)
+        )
+
+        processor.processNotification(event)
+
+        val convId = ConversationIdGenerator.generate("com.pkg", null, "Title", "Sender", "key1")
+        val expectedMsgId = MessageIdGenerator.generate("com.pkg", convId, "Sender", "Hello", 0, "key1", 0)
+        val storedMsg = db.messageDao().getMessageById(expectedMsgId)
+
+        assertNotNull(storedMsg)
     }
 
     @Test

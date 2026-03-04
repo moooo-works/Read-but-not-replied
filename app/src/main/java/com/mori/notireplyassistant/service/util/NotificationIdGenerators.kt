@@ -21,9 +21,15 @@ object MessageIdGenerator {
         conversationId: String,
         sender: String,
         text: String?,
-        timestamp: Long
+        timestamp: Long,
+        sbnKey: String,
+        messageIndex: Int
     ): String {
-        val input = "$packageName:$conversationId:$sender:${text ?: ""}:$timestamp"
+        val input = if (timestamp > 0) {
+            "$packageName:$conversationId:$sender:${text ?: ""}:$timestamp"
+        } else {
+            "$packageName:$conversationId:$sender:${text ?: ""}:$sbnKey:$messageIndex"
+        }
         return sha256(input)
     }
 
