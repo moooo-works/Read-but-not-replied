@@ -93,6 +93,11 @@ class NotificationProcessor @Inject constructor(
             )
             val rawId = db.rawNotificationDao().insertRawEvent(rawEntity)
 
+            // Ignore group summary notifications from creating duplicate message entries
+            if (event.isGroupSummary) {
+                return@withTransaction
+            }
+
             // Step 3: Ensure Conversation Exists
             val existingConversation = db.conversationDao().getConversationById(conversationId)
             if (existingConversation == null) {

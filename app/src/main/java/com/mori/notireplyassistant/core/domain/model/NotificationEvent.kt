@@ -11,6 +11,7 @@ data class NotificationEvent(
     val groupKey: String?,
     val category: String?,
     val isGroup: Boolean,
+    val isGroupSummary: Boolean = isGroup,
     val styleType: String?, // Messaging, BigText, etc.
     val styleMetadata: String, // JSON
     val messages: List<MessageData> = emptyList(),

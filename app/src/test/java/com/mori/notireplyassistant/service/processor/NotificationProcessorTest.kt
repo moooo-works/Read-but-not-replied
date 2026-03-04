@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,6 +54,7 @@ class NotificationProcessorTest {
             groupKey = null,
             category = "msg",
             isGroup = false,
+            isGroupSummary = false,
             styleType = "MessagingStyle",
             styleMetadata = "{}",
             hasRemoteInput = true,
@@ -89,6 +91,7 @@ class NotificationProcessorTest {
             groupKey = null,
             category = "msg",
             isGroup = false,
+            isGroupSummary = false,
             styleType = "MessagingStyle",
             styleMetadata = "{}",
             hasRemoteInput = true,
@@ -105,9 +108,6 @@ class NotificationProcessorTest {
         processor.processNotification(event)
         conv = db.conversationDao().getConversationById(convId)
         assertEquals(1, conv?.pendingCount) // Should still be 1 due to short window suppression
-
-        // Since we suppressed it entirely, there should be no additional message row check needed,
-        // but just in case, we can verify raw notification count or message count.
     }
 
     @Test
@@ -124,6 +124,7 @@ class NotificationProcessorTest {
             groupKey = null,
             category = "msg",
             isGroup = false,
+            isGroupSummary = false,
             styleType = "MessagingStyle",
             styleMetadata = "{}",
             hasRemoteInput = true,
@@ -153,6 +154,7 @@ class NotificationProcessorTest {
             groupKey = null,
             category = "msg",
             isGroup = false,
+            isGroupSummary = false,
             styleType = "MessagingStyle",
             styleMetadata = "{}",
             hasRemoteInput = true,
@@ -172,5 +174,61 @@ class NotificationProcessorTest {
         val conv = db.conversationDao().getConversationById(convId)
         assertEquals(2, conv?.pendingCount)
         assertEquals("World", conv?.lastMessagePreview)
+    }
+
+    @Test
+    fun processNotification_groupSummary_doesNotInsertMessagesOrIncrementCount() = runBlocking {
+        val msg = MessageData("Sender", "Hello from summary", 1000)
+
+        // Emulate summary notification
+        val summaryEvent = NotificationEvent(
+            sbnKey = "summary_key",
+            packageName = "com.pkg",
+            notificationId = 100,
+            tag = null,
+            postTime = 1000,
+            title = "Group Summary",
+            content = "Hello from summary",
+            groupKey = "group1",
+            category = "msg",
+            isGroup = true,
+            isGroupSummary = true, // Key flag
+            styleType = "MessagingStyle",
+            styleMetadata = "{}",
+            hasRemoteInput = true,
+            messages = listOf(msg)
+        )
+        processor.processNotification(summaryEvent)
+
+        val convId = ConversationIdGenerator.generate("com.pkg", "group1", "Group Summary", "Sender", "summary_key")
+        val convAfterSummary = db.conversationDao().getConversationById(convId)
+
+        // The conversation shouldn't even be created if we bail out early, or it shouldn't have any messages if created
+        // Based on the code, we bail out right after raw notification insertion, so conversation is null.
+        assertNull(convAfterSummary)
+
+        // Now process the child
+        val childEvent = NotificationEvent(
+            sbnKey = "child_key",
+            packageName = "com.pkg",
+            notificationId = 101,
+            tag = null,
+            postTime = 1005,
+            title = "Group Summary", // Usually same title in child
+            content = "Hello from summary",
+            groupKey = "group1",
+            category = "msg",
+            isGroup = true,
+            isGroupSummary = false, // Not a summary
+            styleType = "MessagingStyle",
+            styleMetadata = "{}",
+            hasRemoteInput = true,
+            messages = listOf(msg)
+        )
+        processor.processNotification(childEvent)
+
+        val convAfterChild = db.conversationDao().getConversationById(convId)
+        assertNotNull(convAfterChild)
+        assertEquals(1, convAfterChild?.pendingCount)
     }
 }

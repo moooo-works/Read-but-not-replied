@@ -124,7 +124,6 @@ class NotificationListenerServiceImplTest {
         service.serviceScope = TestScope(testDispatcher)
         isReadyFlow.value = false // Not ready initially
 
-        // Trigger connected behavior manually since calling super.onListenerConnected will fail on Context
         val job = kotlinx.coroutines.CoroutineScope(testDispatcher).launch {
             settingsRepository.isReadyFlow.collect { isReady ->
                 if (isReady) {
@@ -146,15 +145,7 @@ class NotificationListenerServiceImplTest {
         isReadyFlow.value = true
         advanceUntilIdle()
 
-        // Kotlin `any()` with Mockito has type inference issues, mockito handles it with custom matcher
-        // or we just cast null to any() class. The simplest is to just verify if processNotification was called.
-        // The mockito way to handle Kotlin nullability with any is: org.mockito.ArgumentMatchers.any() but as
-        // NotificationEvent
-        verify(notificationProcessor).processNotification(any() ?: NotificationEvent(
-            sbnKey = "", packageName = "", notificationId = 0, tag = "", postTime = 0,
-            title = "", content = "", groupKey = null, category = null, isGroup = false,
-            styleType = null, styleMetadata = "", messages = emptyList(), hasRemoteInput = false
-        ))
+        verify(notificationProcessor).processNotification((any() ?: NotificationEvent("", "", 0, null, 0L, "", "", null, null, false, false, null, "", emptyList(), false)))
 
         job.cancel()
     }

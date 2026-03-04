@@ -22,8 +22,8 @@ object MessageIdGenerator {
         sender: String,
         text: String?,
         timestamp: Long,
-        sbnKey: String,
-        messageIndex: Int
+        sbnKey: String = "",
+        messageIndex: Int = 0
     ): String {
         val input = if (timestamp > 0) {
             "$packageName:$conversationId:$sender:${text ?: ""}:$timestamp"

@@ -186,7 +186,8 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
             content = content,
             groupKey = sbn.groupKey,
             category = sbn.notification.category,
-            isGroup = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
+            isGroup = true, // We don't really have a strict framework concept of isGroup beyond presence of groupKey, but we keep it true for backwards compatibility if needed.
+            isGroupSummary = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
             styleType = extras.getString(Notification.EXTRA_TEMPLATE),
             styleMetadata = "{\"type\": \"${extras.getString(Notification.EXTRA_TEMPLATE)}\"}",
             messages = messages,
