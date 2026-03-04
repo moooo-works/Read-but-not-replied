@@ -1,12 +1,12 @@
 package com.mori.notireplyassistant.service.processor
 
+import android.util.LruCache
 import androidx.room.withTransaction
 import com.mori.notireplyassistant.core.database.NotiReplyDatabase
 import com.mori.notireplyassistant.core.database.entity.ConversationEntity
 import com.mori.notireplyassistant.core.database.entity.MessageEntity
 import com.mori.notireplyassistant.core.database.entity.RawNotificationEntity
 import com.mori.notireplyassistant.core.domain.model.NotificationEvent
-import com.mori.notireplyassistant.core.domain.model.MessageData
 import com.mori.notireplyassistant.service.util.ConversationIdGenerator
 import com.mori.notireplyassistant.service.util.MessageIdGenerator
 import javax.inject.Inject
@@ -16,6 +16,10 @@ import javax.inject.Singleton
 class NotificationProcessor @Inject constructor(
     private val db: NotiReplyDatabase
 ) {
+    data class ProcessedRecord(val messageIdsHash: Int, val processedAt: Long)
+    // Use LruCache to prevent infinite memory leak (keeps last 200 records)
+    private val recentProcessedMap = LruCache<String, ProcessedRecord>(200)
+    private val SUPPRESSION_WINDOW_MS = 2000L
 
     suspend fun processNotification(event: NotificationEvent) {
         // Step 1: Calculate Conversation ID
@@ -26,6 +30,53 @@ class NotificationProcessor @Inject constructor(
             if (event.messages.isNotEmpty()) event.messages.last().sender else event.title,
             event.sbnKey
         )
+
+        // Pre-compute message IDs and check short-window duplication
+        val pendingMessages = if (event.messages.isNotEmpty()) {
+            event.messages.mapIndexed { index, msg ->
+                val id = MessageIdGenerator.generate(
+                    event.packageName,
+                    conversationId,
+                    msg.sender,
+                    msg.text,
+                    msg.timestamp,
+                    event.sbnKey,
+                    index
+                )
+                Triple(id, msg, index)
+            }
+        } else {
+            val id = MessageIdGenerator.generate(
+                event.packageName,
+                conversationId,
+                event.title, // Sender fallback
+                event.content,
+                event.postTime,
+                event.sbnKey,
+                0
+            )
+            listOf(Triple(id, null, 0))
+        }
+
+        val messageIdsHash = pendingMessages.map { it.first }.hashCode()
+        val now = System.currentTimeMillis()
+
+        var shouldSkip = false
+        synchronized(recentProcessedMap) {
+            val lastProcessed = recentProcessedMap.get(event.sbnKey)
+            if (lastProcessed != null &&
+                lastProcessed.messageIdsHash == messageIdsHash &&
+                (now - lastProcessed.processedAt) < SUPPRESSION_WINDOW_MS) {
+                shouldSkip = true
+            } else {
+                recentProcessedMap.put(event.sbnKey, ProcessedRecord(messageIdsHash, now))
+            }
+        }
+
+        if (shouldSkip) {
+            // Duplicate update within 2 seconds, skip processing
+            return
+        }
 
         db.withTransaction {
             // Step 2: Insert Raw Event
@@ -41,6 +92,11 @@ class NotificationProcessor @Inject constructor(
                 eventType = "POSTED"
             )
             val rawId = db.rawNotificationDao().insertRawEvent(rawEntity)
+
+            // Ignore group summary notifications from creating duplicate message entries
+            if (event.isGroupSummary) {
+                return@withTransaction
+            }
 
             // Step 3: Ensure Conversation Exists
             val existingConversation = db.conversationDao().getConversationById(conversationId)
@@ -58,41 +114,27 @@ class NotificationProcessor @Inject constructor(
             }
 
             // Step 4: Generate Message Entities
-            val messagesToInsert = if (event.messages.isNotEmpty()) {
-                event.messages.map { msg ->
+            val messagesToInsert = pendingMessages.map { triple ->
+                val (id, msgData, _) = triple
+                if (msgData != null) {
                     MessageEntity(
-                        messageId = MessageIdGenerator.generate(
-                            event.packageName,
-                            conversationId,
-                            msg.sender,
-                            msg.text,
-                            msg.timestamp
-                        ),
+                        messageId = id,
                         conversationId = conversationId,
                         rawEventId = rawId,
-                        sender = msg.sender,
-                        text = msg.text ?: "",
-                        timestamp = msg.timestamp
+                        sender = msgData.sender,
+                        text = msgData.text ?: "",
+                        timestamp = msgData.timestamp
                     )
-                }
-            } else {
-                // Fallback for non-messaging style
-                listOf(
+                } else {
                     MessageEntity(
-                        messageId = MessageIdGenerator.generate(
-                            event.packageName,
-                            conversationId,
-                            event.title, // Sender fallback
-                            event.content,
-                            event.postTime
-                        ),
+                        messageId = id,
                         conversationId = conversationId,
                         rawEventId = rawId,
                         sender = event.title,
                         text = event.content,
                         timestamp = event.postTime
                     )
-                )
+                }
             }
 
             // Step 5: Insert Messages (Ignore duplicates)

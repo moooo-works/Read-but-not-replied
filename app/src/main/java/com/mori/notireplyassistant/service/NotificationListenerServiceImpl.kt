@@ -16,8 +16,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import java.util.concurrent.ConcurrentLinkedQueue
 
 @AndroidEntryPoint
 class NotificationListenerServiceImpl : NotificationListenerService() {
@@ -31,10 +33,52 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
     @Inject
     lateinit var activeReplyMap: ActiveReplyMap
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Make this var and internal for testing, defaults to real implementation
+    internal var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val burstFilter = BurstFilter()
 
+    private val pendingBuffer = ConcurrentLinkedQueue<PendingAction>()
+    private val MAX_BUFFER_SIZE = 50
+    private var isFlushed = false
+
+    sealed class PendingAction {
+        data class Post(val sbn: StatusBarNotification) : PendingAction()
+        data class Remove(val sbn: StatusBarNotification) : PendingAction()
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        serviceScope.launch {
+            settingsRepository.isReadyFlow.collectLatest { isReady ->
+                if (isReady && !isFlushed) {
+                    flushBuffer()
+                }
+            }
+        }
+    }
+
+    private fun flushBuffer() {
+        isFlushed = true
+        while (pendingBuffer.isNotEmpty()) {
+            val action = pendingBuffer.poll() ?: break
+            when (action) {
+                is PendingAction.Post -> processPost(action.sbn)
+                is PendingAction.Remove -> processRemove(action.sbn)
+            }
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (!settingsRepository.isReady) {
+            if (pendingBuffer.size < MAX_BUFFER_SIZE) {
+                pendingBuffer.offer(PendingAction.Post(sbn))
+            }
+            return
+        }
+        processPost(sbn)
+    }
+
+    private fun processPost(sbn: StatusBarNotification) {
         if (settingsRepository.isExcluded(sbn.packageName)) return
 
         if (!burstFilter.shouldProcess(sbn.key, sbn.id, sbn.tag, sbn.postTime)) {
@@ -73,8 +117,19 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        // Always remove from active map first, regardless of readiness
         activeReplyMap.remove(sbn.key)
 
+        if (!settingsRepository.isReady) {
+            if (pendingBuffer.size < MAX_BUFFER_SIZE) {
+                pendingBuffer.offer(PendingAction.Remove(sbn))
+            }
+            return
+        }
+        processRemove(sbn)
+    }
+
+    private fun processRemove(sbn: StatusBarNotification) {
         if (settingsRepository.isExcluded(sbn.packageName)) return
 
         serviceScope.launch {
@@ -131,7 +186,8 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
             content = content,
             groupKey = sbn.groupKey,
             category = sbn.notification.category,
-            isGroup = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
+            isGroup = true, // We don't really have a strict framework concept of isGroup beyond presence of groupKey, but we keep it true for backwards compatibility if needed.
+            isGroupSummary = (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0,
             styleType = extras.getString(Notification.EXTRA_TEMPLATE),
             styleMetadata = "{\"type\": \"${extras.getString(Notification.EXTRA_TEMPLATE)}\"}",
             messages = messages,
