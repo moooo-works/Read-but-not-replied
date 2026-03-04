@@ -3,8 +3,10 @@ package com.mori.notireplyassistant.core.repository
 import com.mori.notireplyassistant.core.datastore.SettingsDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
@@ -16,12 +18,15 @@ class SettingsRepository @Inject constructor(
     externalScope: CoroutineScope
 ) {
 
-    @Volatile
-    private var isReady = false
+    private val _isReadyFlow = MutableStateFlow(false)
+    val isReadyFlow: StateFlow<Boolean> = _isReadyFlow.asStateFlow()
+
+    val isReady: Boolean
+        get() = _isReadyFlow.value
 
     // Hot flow, kept active to cache the exclusion list
     val excludedPackagesFlow: StateFlow<Set<String>> = settingsDataStore.excludedPackagesFlow
-        .onEach { isReady = true }
+        .onEach { _isReadyFlow.value = true }
         .stateIn(
             scope = externalScope,
             started = SharingStarted.Eagerly,
@@ -29,7 +34,7 @@ class SettingsRepository @Inject constructor(
         )
 
     fun isExcluded(packageName: String): Boolean {
-        // If not ready yet, return true (conservative: ignore)
+        // If not ready yet, return false (do not exclude)
         if (!isReady) return false
         return excludedPackagesFlow.value.contains(packageName)
     }
