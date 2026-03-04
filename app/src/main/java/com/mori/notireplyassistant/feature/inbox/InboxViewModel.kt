@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -21,6 +22,7 @@ sealed interface InboxUiState {
     data object Loading : InboxUiState
     data class Success(val conversations: List<ConversationUiModel>) : InboxUiState
     data object Empty : InboxUiState
+    data object Reminders : InboxUiState
 }
 
 @HiltViewModel
@@ -34,18 +36,21 @@ class InboxViewModel @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<InboxUiState> = _selectedTab
         .flatMapLatest { tabIndex ->
-            val filter = when (tabIndex) {
-                0 -> ConversationFilter.ALL
-                1 -> ConversationFilter.ARCHIVED
-                else -> ConversationFilter.ALL
-            }
-            repository.observeConversations(filter)
-        }
-        .map { conversations ->
-            if (conversations.isEmpty()) {
-                InboxUiState.Empty
+            if (tabIndex == 2) {
+                flowOf(InboxUiState.Reminders)
             } else {
-                InboxUiState.Success(conversations)
+                val filter = when (tabIndex) {
+                    0 -> ConversationFilter.ALL
+                    1 -> ConversationFilter.ARCHIVED
+                    else -> ConversationFilter.ALL
+                }
+                repository.observeConversations(filter).map { conversations ->
+                    if (conversations.isEmpty()) {
+                        InboxUiState.Empty
+                    } else {
+                        InboxUiState.Success(conversations)
+                    }
+                }
             }
         }
         .stateIn(

@@ -1,5 +1,6 @@
 package com.mori.notireplyassistant.core.database
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.mori.notireplyassistant.core.database.dao.ConversationDao
@@ -21,7 +22,10 @@ import com.mori.notireplyassistant.core.database.entity.ReminderEntity
         ReminderEntity::class,
         QuickReplyTemplateEntity::class
     ],
-    version = 1,
+    version = 2,
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2)
+    ],
     exportSchema = true
 )
 abstract class NotiReplyDatabase : RoomDatabase() {

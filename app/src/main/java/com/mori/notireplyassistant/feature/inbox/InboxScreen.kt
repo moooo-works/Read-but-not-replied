@@ -56,6 +56,11 @@ fun InboxScreen(
                     onClick = { viewModel.onTabSelected(1) },
                     text = { Text("Archived") }
                 )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { viewModel.onTabSelected(2) },
+                    text = { Text("Reminders") }
+                )
             }
 
             when (val state = uiState) {
@@ -89,6 +94,9 @@ fun InboxScreen(
                         }
                     }
                 }
+                is InboxUiState.Reminders -> {
+                    RemindersScreen()
+                }
             }
         }
     }
@@ -112,6 +120,16 @@ fun ConversationItem(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
+                if (conversation.threadType == "GROUP") {
+                    Badge(modifier = Modifier.padding(start = 4.dp), containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                        Text("Group", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                } else if (conversation.threadType == "DIRECT") {
+                    Badge(modifier = Modifier.padding(start = 4.dp), containerColor = MaterialTheme.colorScheme.tertiaryContainer) {
+                        Text("Direct", color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    }
+                }
+
                 if (conversation.pendingCount > 0) {
                     Badge(modifier = Modifier.padding(start = 8.dp)) {
                         Text(conversation.pendingCount.toString())

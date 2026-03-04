@@ -38,7 +38,8 @@ class NotificationRepository @Inject constructor(
                     timestamp = entity.lastTimestamp,
                     pendingCount = entity.pendingCount,
                     isArchived = entity.isArchived,
-                    isPinned = entity.isPinned
+                    isPinned = entity.isPinned,
+                    threadType = entity.threadType
                 )
             }
         }

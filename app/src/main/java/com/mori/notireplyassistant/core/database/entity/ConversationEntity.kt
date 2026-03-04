@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.mori.notireplyassistant.service.util.ThreadType
 
 @Entity(
     tableName = "conversations",
@@ -36,5 +37,11 @@ data class ConversationEntity(
     val isArchived: Boolean = false,
 
     @ColumnInfo(name = "is_pinned")
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+
+    @ColumnInfo(name = "thread_type", defaultValue = "UNKNOWN")
+    val threadType: String = ThreadType.UNKNOWN.name,
+
+    @ColumnInfo(name = "thread_key_source", defaultValue = "UNKNOWN")
+    val threadKeySource: String = "UNKNOWN"
 )

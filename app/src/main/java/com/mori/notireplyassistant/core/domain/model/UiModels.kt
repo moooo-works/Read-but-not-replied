@@ -9,7 +9,8 @@ data class ConversationUiModel(
     val pendingCount: Int,
     val isArchived: Boolean,
     val isPinned: Boolean,
-    val hasPendingReminder: Boolean = false // Populated later if needed
+    val hasPendingReminder: Boolean = false, // Populated later if needed
+    val threadType: String = "UNKNOWN"
 )
 
 data class MessageUiModel(
