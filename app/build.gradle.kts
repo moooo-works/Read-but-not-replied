@@ -32,6 +32,21 @@ android {
         }
     }
 
+    // Pass -PskipRobolectric to ./gradlew test to exclude Robolectric-based tests (faster CI runs)
+    if (project.hasProperty("skipRobolectric")) {
+        tasks.withType<Test>().configureEach {
+            exclude(
+                "**/DaoTest*",
+                "**/NotificationRepositoryTest*",
+                "**/SettingsRepositoryTest*",
+                "**/BurstFilterTest*",
+                "**/NotificationListenerServiceImplTest*",
+                "**/ReminderWorkerTest*",
+                "**/NotificationProcessorTest*",
+            )
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
