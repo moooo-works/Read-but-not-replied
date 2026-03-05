@@ -2,8 +2,8 @@ package com.mori.notireplyassistant.feature.settings.excluded
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mori.notireplyassistant.core.domain.model.AppInfo
-import com.mori.notireplyassistant.core.domain.provider.AppInfoProvider
+import com.mori.notireplyassistant.core.domain.model.InstalledAppUiModel
+import com.mori.notireplyassistant.core.repository.InstalledAppsRepository
 import com.mori.notireplyassistant.core.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -17,20 +17,20 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ExcludedAppItem(
-    val appInfo: AppInfo,
+    val appInfo: InstalledAppUiModel,
     val isExcluded: Boolean
 )
 
 @HiltViewModel
 class ExcludedAppsViewModel @Inject constructor(
-    private val appInfoProvider: AppInfoProvider,
+    private val installedAppsRepository: InstalledAppsRepository,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val installedApps = MutableStateFlow<List<AppInfo>>(emptyList())
+    private val installedApps = MutableStateFlow<List<InstalledAppUiModel>>(emptyList())
 
     val uiState: StateFlow<List<ExcludedAppItem>> = combine(
         installedApps,
@@ -38,7 +38,7 @@ class ExcludedAppsViewModel @Inject constructor(
         _searchQuery
     ) { apps, excludedSet, query ->
         apps.filter { app ->
-            query.isBlank() || app.name.contains(query, ignoreCase = true)
+            query.isBlank() || app.name.contains(query, ignoreCase = true) || app.packageName.contains(query, ignoreCase = true)
         }.map { app ->
             ExcludedAppItem(app, excludedSet.contains(app.packageName))
         }
@@ -54,7 +54,7 @@ class ExcludedAppsViewModel @Inject constructor(
 
     private fun loadApps() {
         viewModelScope.launch(Dispatchers.IO) {
-            installedApps.value = appInfoProvider.getInstalledApps()
+            installedApps.value = installedAppsRepository.getInstalledApps()
         }
     }
 
