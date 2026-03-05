@@ -8,6 +8,7 @@ import com.mori.notireplyassistant.core.database.entity.MessageEntity
 import com.mori.notireplyassistant.core.database.entity.RawNotificationEntity
 import com.mori.notireplyassistant.core.domain.model.NotificationEvent
 import com.mori.notireplyassistant.service.util.ConversationIdGenerator
+import com.mori.notireplyassistant.service.util.ConversationKeyResolver
 import com.mori.notireplyassistant.service.util.MessageIdGenerator
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,13 +24,8 @@ class NotificationProcessor @Inject constructor(
 
     suspend fun processNotification(event: NotificationEvent) {
         // Step 1: Calculate Conversation ID
-        val conversationId = ConversationIdGenerator.generate(
-            event.packageName,
-            event.groupKey,
-            event.title,
-            if (event.messages.isNotEmpty()) event.messages.last().sender else event.title,
-            event.sbnKey
-        )
+        val resolvedKey = ConversationKeyResolver.resolve(event)
+        val conversationId = ConversationIdGenerator.generate(event.packageName, resolvedKey)
 
         // Pre-compute message IDs and check short-window duplication
         val pendingMessages = if (event.messages.isNotEmpty()) {
@@ -105,10 +101,12 @@ class NotificationProcessor @Inject constructor(
                     ConversationEntity(
                         conversationId = conversationId,
                         packageName = event.packageName,
-                        title = event.title,
+                        title = event.title, // First seen title
                         lastMessagePreview = event.content,
                         lastTimestamp = event.postTime,
-                        pendingCount = 0
+                        pendingCount = 0,
+                        threadType = resolvedKey.threadType.name,
+                        threadKeySource = resolvedKey.keySource
                     )
                 )
             }

@@ -3,8 +3,13 @@ package com.mori.notireplyassistant.service.util
 import java.security.MessageDigest
 
 object ConversationIdGenerator {
+    fun generate(packageName: String, resolvedKey: ResolvedConversationKey): String {
+        return "$packageName|${resolvedKey.threadKey}"
+    }
+
+    // Keep the old one for compatibility or test if needed, but mark it deprecated
+    @Deprecated("Use generate with ResolvedConversationKey instead")
     fun generate(packageName: String, groupKey: String?, title: String?, sender: String?, sbnKey: String): String {
-        // Preference: groupKey (if present) -> title/sender -> sbnKey
         val normalizedKey = when {
             !groupKey.isNullOrEmpty() -> groupKey
             !sender.isNullOrEmpty() -> "sender:$sender"

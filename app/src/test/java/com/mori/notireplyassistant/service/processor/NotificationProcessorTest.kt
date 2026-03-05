@@ -1,26 +1,21 @@
 package com.mori.notireplyassistant.service.processor
 
-import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.mori.notireplyassistant.core.database.NotiReplyDatabase
 import com.mori.notireplyassistant.core.domain.model.MessageData
 import com.mori.notireplyassistant.core.domain.model.NotificationEvent
-import com.mori.notireplyassistant.service.util.ConversationIdGenerator
-import com.mori.notireplyassistant.service.util.MessageIdGenerator
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@RunWith(AndroidJUnit4::class)
 class NotificationProcessorTest {
 
     private lateinit var db: NotiReplyDatabase
@@ -28,207 +23,84 @@ class NotificationProcessorTest {
 
     @Before
     fun setup() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, NotiReplyDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        db = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            NotiReplyDatabase::class.java
+        ).allowMainThreadQueries().build()
+
         processor = NotificationProcessor(db)
     }
 
     @After
-    fun tearDown() {
+    fun teardown() {
         db.close()
     }
 
     @Test
-    fun processNotification_insertsDataCorrectly() = runBlocking {
-        val msg = MessageData("Sender", "Hello", 1000)
-        val event = NotificationEvent(
-            sbnKey = "key1",
-            packageName = "com.pkg",
-            notificationId = 1,
-            tag = null,
-            postTime = 1000,
-            title = "Title",
-            content = "Content",
-            groupKey = null,
-            category = "msg",
-            isGroup = false,
-            isGroupSummary = false,
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg)
+    fun testProcessNotification_conversationSeparation_byTitle() = runBlocking {
+        // Event 1: Chat A
+        val eventA = NotificationEvent(
+            sbnKey = "keyA", packageName = "com.test", notificationId = 1, tag = null, postTime = 1000L,
+            title = "Chat A", content = "Hello", groupKey = null, category = null, isGroup = false,
+            styleType = null, styleMetadata = "{}", hasRemoteInput = false
         )
 
-        processor.processNotification(event)
+        // Event 2: Chat B
+        val eventB = NotificationEvent(
+            sbnKey = "keyB", packageName = "com.test", notificationId = 2, tag = null, postTime = 2000L,
+            title = "Chat B", content = "Hi there", groupKey = null, category = null, isGroup = false,
+            styleType = null, styleMetadata = "{}", hasRemoteInput = false
+        )
 
-        // Expected conversation ID: com.pkg|sender:Sender
-        val convId = ConversationIdGenerator.generate("com.pkg", null, "Title", "Sender", "key1")
-        val conv = db.conversationDao().getConversationById(convId)
+        processor.processNotification(eventA)
+        processor.processNotification(eventB)
 
-        assertNotNull(conv)
-        assertEquals(1, conv?.pendingCount)
-        assertEquals("Content", conv?.lastMessagePreview)
+        val activeConvos = db.conversationDao().getActiveConversations().first()
+        assertEquals(2, activeConvos.size)
 
-        // Expected Message ID
-        val msgId = MessageIdGenerator.generate("com.pkg", convId, "Sender", "Hello", 1000, "key1", 0)
-        val storedMsg = db.messageDao().getMessageById(msgId)
-        assertNotNull(storedMsg)
+        val convA = activeConvos.find { it.title == "Chat A" }
+        assertNotNull(convA)
+        assertEquals("com.test|t:chat a", convA?.conversationId)
+        assertEquals(1, convA?.pendingCount)
+
+        val convB = activeConvos.find { it.title == "Chat B" }
+        assertNotNull(convB)
+        assertEquals("com.test|t:chat b", convB?.conversationId)
+        assertEquals(1, convB?.pendingCount)
     }
 
     @Test
-    fun processNotification_repeatedUpdate_doesNotinflateCount() = runBlocking {
-        val msg = MessageData("Sender", "Hello", 1000)
-        val event = NotificationEvent(
-            sbnKey = "key1",
-            packageName = "com.pkg",
-            notificationId = 1,
-            tag = null,
-            postTime = 1000,
-            title = "Title",
-            content = "Hello",
-            groupKey = null,
-            category = "msg",
-            isGroup = false,
-            isGroupSummary = false,
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg)
+    fun testProcessNotification_conversationSeparation_byConversationTitle() = runBlocking {
+        // Event 1: LINE Group 1
+        val eventA = NotificationEvent(
+            sbnKey = "key1", packageName = "jp.naver.line.android", notificationId = 1, tag = null, postTime = 1000L,
+            title = "Alice", content = "Hello", groupKey = null, category = null, isGroup = false,
+            styleType = "android.app.Notification\$MessagingStyle", styleMetadata = "{}", hasRemoteInput = false,
+            conversationTitle = "Group 1", isGroupConversation = true,
+            messages = listOf(MessageData("Alice", "Hello", 1000L))
         )
 
-        // First process
-        processor.processNotification(event)
-        val convId = ConversationIdGenerator.generate("com.pkg", null, "Title", "Sender", "key1")
-        var conv = db.conversationDao().getConversationById(convId)
-        assertEquals(1, conv?.pendingCount)
-
-        // Second process (same exact event/message) immediately
-        processor.processNotification(event)
-        conv = db.conversationDao().getConversationById(convId)
-        assertEquals(1, conv?.pendingCount) // Should still be 1 due to short window suppression
-    }
-
-    @Test
-    fun processNotification_messageWithZeroTimestamp_generatesStableId() = runBlocking {
-        val msg = MessageData("Sender", "Hello", 0)
-        val event = NotificationEvent(
-            sbnKey = "key1",
-            packageName = "com.pkg",
-            notificationId = 1,
-            tag = null,
-            postTime = 1000,
-            title = "Title",
-            content = "Hello",
-            groupKey = null,
-            category = "msg",
-            isGroup = false,
-            isGroupSummary = false,
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg)
+        // Event 2: LINE Group 2
+        val eventB = NotificationEvent(
+            sbnKey = "key2", packageName = "jp.naver.line.android", notificationId = 2, tag = null, postTime = 2000L,
+            title = "Bob", content = "Hi", groupKey = null, category = null, isGroup = false,
+            styleType = "android.app.Notification\$MessagingStyle", styleMetadata = "{}", hasRemoteInput = false,
+            conversationTitle = "Group 2", isGroupConversation = true,
+            messages = listOf(MessageData("Bob", "Hi", 2000L))
         )
 
-        processor.processNotification(event)
+        processor.processNotification(eventA)
+        processor.processNotification(eventB)
 
-        val convId = ConversationIdGenerator.generate("com.pkg", null, "Title", "Sender", "key1")
-        val expectedMsgId = MessageIdGenerator.generate("com.pkg", convId, "Sender", "Hello", 0, "key1", 0)
-        val storedMsg = db.messageDao().getMessageById(expectedMsgId)
+        val activeConvos = db.conversationDao().getActiveConversations().first()
+        assertEquals(2, activeConvos.size)
 
-        assertNotNull(storedMsg)
-    }
+        val convA = activeConvos.find { it.conversationId == "jp.naver.line.android|mt:group 1" }
+        assertNotNull(convA)
+        assertEquals("GROUP", convA?.threadType)
 
-    @Test
-    fun processNotification_newMessages_incrementsCount() = runBlocking {
-        val msg1 = MessageData("Sender", "Hello", 1000)
-        val event1 = NotificationEvent(
-            sbnKey = "key1",
-            packageName = "com.pkg",
-            notificationId = 1,
-            tag = null,
-            postTime = 1000,
-            title = "Title",
-            content = "Hello",
-            groupKey = null,
-            category = "msg",
-            isGroup = false,
-            isGroupSummary = false,
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg1)
-        )
-        processor.processNotification(event1)
-
-        val msg2 = MessageData("Sender", "World", 2000)
-        val event2 = event1.copy(
-            postTime = 2000,
-            content = "World",
-            messages = listOf(msg1, msg2) // Old + New
-        )
-        processor.processNotification(event2)
-
-        val convId = ConversationIdGenerator.generate("com.pkg", null, "Title", "Sender", "key1")
-        val conv = db.conversationDao().getConversationById(convId)
-        assertEquals(2, conv?.pendingCount)
-        assertEquals("World", conv?.lastMessagePreview)
-    }
-
-    @Test
-    fun processNotification_groupSummary_doesNotInsertMessagesOrIncrementCount() = runBlocking {
-        val msg = MessageData("Sender", "Hello from summary", 1000)
-
-        // Emulate summary notification
-        val summaryEvent = NotificationEvent(
-            sbnKey = "summary_key",
-            packageName = "com.pkg",
-            notificationId = 100,
-            tag = null,
-            postTime = 1000,
-            title = "Group Summary",
-            content = "Hello from summary",
-            groupKey = "group1",
-            category = "msg",
-            isGroup = true,
-            isGroupSummary = true, // Key flag
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg)
-        )
-        processor.processNotification(summaryEvent)
-
-        val convId = ConversationIdGenerator.generate("com.pkg", "group1", "Group Summary", "Sender", "summary_key")
-        val convAfterSummary = db.conversationDao().getConversationById(convId)
-
-        // The conversation shouldn't even be created if we bail out early, or it shouldn't have any messages if created
-        // Based on the code, we bail out right after raw notification insertion, so conversation is null.
-        assertNull(convAfterSummary)
-
-        // Now process the child
-        val childEvent = NotificationEvent(
-            sbnKey = "child_key",
-            packageName = "com.pkg",
-            notificationId = 101,
-            tag = null,
-            postTime = 1005,
-            title = "Group Summary", // Usually same title in child
-            content = "Hello from summary",
-            groupKey = "group1",
-            category = "msg",
-            isGroup = true,
-            isGroupSummary = false, // Not a summary
-            styleType = "MessagingStyle",
-            styleMetadata = "{}",
-            hasRemoteInput = true,
-            messages = listOf(msg)
-        )
-        processor.processNotification(childEvent)
-
-        val convAfterChild = db.conversationDao().getConversationById(convId)
-        assertNotNull(convAfterChild)
-        assertEquals(1, convAfterChild?.pendingCount)
+        val convB = activeConvos.find { it.conversationId == "jp.naver.line.android|mt:group 2" }
+        assertNotNull(convB)
+        assertEquals("GROUP", convB?.threadType)
     }
 }

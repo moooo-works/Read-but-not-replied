@@ -15,7 +15,9 @@ data class NotificationEvent(
     val styleType: String?, // Messaging, BigText, etc.
     val styleMetadata: String, // JSON
     val messages: List<MessageData> = emptyList(),
-    val hasRemoteInput: Boolean
+    val hasRemoteInput: Boolean,
+    val conversationTitle: String? = null,
+    val isGroupConversation: Boolean? = null
 )
 
 data class MessageData(
@@ -27,9 +29,5 @@ data class MessageData(
 
 data class ActiveReplyInfo(
     val key: String,
-    // Note: PendingIntent and RemoteInput are framework objects,
-    // so we keep them in a Service-level cache, not in this pure domain model if possible.
-    // However, for the Processor to handle replies later, we need a way to reference them.
-    // We will use the sbnKey as the handle.
     val canReply: Boolean
 )

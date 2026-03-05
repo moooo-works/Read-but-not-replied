@@ -12,6 +12,7 @@ import com.mori.notireplyassistant.service.processor.BurstFilter
 import com.mori.notireplyassistant.service.processor.NotificationProcessor
 import com.mori.notireplyassistant.service.receiver.ActiveReplyMap
 import com.mori.notireplyassistant.service.util.ConversationIdGenerator
+import com.mori.notireplyassistant.service.util.ConversationKeyResolver
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -89,13 +90,8 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
         val event = mapToEvent(sbn) ?: return
 
         // Resolve conversationId to cache reply action
-        val conversationId = ConversationIdGenerator.generate(
-            event.packageName,
-            event.groupKey,
-            event.title,
-            if (event.messages.isNotEmpty()) event.messages.last().sender else event.title,
-            event.sbnKey
-        )
+        val resolvedKey = ConversationKeyResolver.resolve(event)
+        val conversationId = ConversationIdGenerator.generate(event.packageName, resolvedKey)
 
         // Cache Reply Action
         val remoteInputInfo = extractRemoteInput(sbn.notification)
@@ -159,6 +155,10 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
         // Extract MessagingStyle messages
         val messages = mutableListOf<MessageData>()
         val messagingStyle = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(sbn.notification)
+
+        var conversationTitle: CharSequence? = null
+        var isGroupConversation: Boolean? = null
+
         if (messagingStyle != null) {
             val styleMessages: List<NotificationCompat.MessagingStyle.Message> = messagingStyle.messages
             for (msg in styleMessages) {
@@ -174,6 +174,8 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
                     )
                 }
             }
+            conversationTitle = messagingStyle.conversationTitle
+            isGroupConversation = messagingStyle.isGroupConversation
         }
 
         return NotificationEvent(
@@ -191,7 +193,9 @@ class NotificationListenerServiceImpl : NotificationListenerService() {
             styleType = extras.getString(Notification.EXTRA_TEMPLATE),
             styleMetadata = "{\"type\": \"${extras.getString(Notification.EXTRA_TEMPLATE)}\"}",
             messages = messages,
-            hasRemoteInput = remoteInputInfo != null
+            hasRemoteInput = remoteInputInfo != null,
+            conversationTitle = conversationTitle?.toString(),
+            isGroupConversation = isGroupConversation
         )
     }
 
