@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.mori.notireplyassistant.core.database.NotiReplyDatabase
 import com.mori.notireplyassistant.core.database.entity.ReminderEntity
 import com.mori.notireplyassistant.core.domain.model.ConversationUiModel
+import com.mori.notireplyassistant.core.domain.model.ReminderUiModel
 import com.mori.notireplyassistant.core.domain.model.MessageUiModel
 import com.mori.notireplyassistant.core.domain.scheduler.ReminderScheduler
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +46,21 @@ class NotificationRepository @Inject constructor(
         }
     }
 
+    fun observeActiveReminders(): Flow<List<ReminderUiModel>> {
+        return db.reminderDao().getActiveRemindersWithConversation().map { list ->
+            list.map { pojo ->
+                ReminderUiModel(
+                    reminderId = pojo.reminderId,
+                    conversationId = pojo.conversationId,
+                    conversationTitle = pojo.conversationTitle,
+                    scheduledTime = pojo.scheduledTime,
+                    status = pojo.status,
+                    note = pojo.note
+                )
+            }
+        }
+    }
+
     fun observeMessages(conversationId: String): Flow<List<MessageUiModel>> {
         return db.messageDao().getMessagesForConversation(conversationId)
             .map { entities ->
@@ -70,6 +86,22 @@ class NotificationRepository @Inject constructor(
 
     suspend fun setPinned(conversationId: String, isPinned: Boolean) {
         db.conversationDao().updatePinned(conversationId, isPinned)
+    }
+
+    suspend fun dismissReminder(reminderId: Long) {
+        db.reminderDao().updateStatus(reminderId, "DISMISSED")
+        scheduler.cancel(reminderId)
+    }
+
+    suspend fun snoozeReminder(reminderId: Long, snoozeDurationMs: Long = 10 * 60 * 1000L) {
+        val reminder = db.reminderDao().getReminderById(reminderId) ?: return
+        val newTime = System.currentTimeMillis() + snoozeDurationMs
+        val updated = reminder.copy(
+            scheduledTime = newTime,
+            status = "SNOOZED"
+        )
+        db.reminderDao().insertReminder(updated)
+        scheduler.schedule(reminderId, newTime)
     }
 
     suspend fun createReminder(conversationId: String, scheduledTime: Long, note: String?) {

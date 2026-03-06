@@ -20,3 +20,12 @@ data class MessageUiModel(
     val timestamp: Long,
     val isMe: Boolean // Inferred from sender == "Me" or specific logic
 )
+
+data class ReminderUiModel(
+    val reminderId: Long,
+    val conversationId: String,
+    val conversationTitle: String,
+    val scheduledTime: Long,
+    val status: String,
+    val note: String?
+)

@@ -2,9 +2,8 @@ package com.mori.notireplyassistant.feature.inbox
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mori.notireplyassistant.core.database.NotiReplyDatabase
-import com.mori.notireplyassistant.core.database.entity.ReminderEntity
-import com.mori.notireplyassistant.core.domain.scheduler.ReminderScheduler
+import com.mori.notireplyassistant.core.domain.model.ReminderUiModel
+import com.mori.notireplyassistant.core.repository.NotificationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,11 +13,10 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RemindersViewModel @Inject constructor(
-    private val db: NotiReplyDatabase,
-    private val scheduler: ReminderScheduler
+    private val repository: NotificationRepository
 ) : ViewModel() {
 
-    val reminders: StateFlow<List<ReminderEntity>> = db.reminderDao().getPendingReminders()
+    val reminders: StateFlow<List<ReminderUiModel>> = repository.observeActiveReminders()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -27,29 +25,13 @@ class RemindersViewModel @Inject constructor(
 
     fun onDismiss(reminderId: Long) {
         viewModelScope.launch {
-            db.reminderDao().updateStatus(reminderId, "DISMISSED")
-            scheduler.cancel(reminderId)
+            repository.dismissReminder(reminderId)
         }
     }
 
     fun onSnooze(reminderId: Long) {
         viewModelScope.launch {
-            val reminder = db.reminderDao().getReminderById(reminderId) ?: return@launch
-
-            // Snooze for 10 minutes
-            val snoozeMs = 10 * 60 * 1000L
-            val newTime = System.currentTimeMillis() + snoozeMs
-
-            val updated = reminder.copy(
-                scheduledTime = newTime,
-                status = "SNOOZED"
-            )
-
-            // Insert with OnConflictStrategy.REPLACE will update
-            db.reminderDao().insertReminder(updated)
-
-            // Schedule the new time
-            scheduler.schedule(reminderId, newTime)
+            repository.snoozeReminder(reminderId)
         }
     }
 }
