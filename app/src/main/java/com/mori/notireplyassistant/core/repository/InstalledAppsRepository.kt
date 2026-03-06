@@ -1,21 +1,20 @@
-package com.mori.notireplyassistant.core.data.provider
+package com.mori.notireplyassistant.core.repository
 
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import com.mori.notireplyassistant.core.domain.model.AppInfo
-import com.mori.notireplyassistant.core.domain.provider.AppInfoProvider
+import com.mori.notireplyassistant.core.domain.model.InstalledAppUiModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class AndroidAppInfoProvider @Inject constructor(
+class InstalledAppsRepository @Inject constructor(
     @ApplicationContext private val context: Context
-) : AppInfoProvider {
+) {
 
-    override fun getInstalledApps(): List<AppInfo> {
+    fun getInstalledApps(): List<InstalledAppUiModel> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
@@ -34,8 +33,9 @@ class AndroidAppInfoProvider @Inject constructor(
         return resolveInfos.mapNotNull { info ->
             val pkg = info.activityInfo.packageName
             val label = info.loadLabel(pm).toString()
+            val icon = info.loadIcon(pm)
             if (pkg != null) {
-                AppInfo(packageName = pkg, name = label)
+                InstalledAppUiModel(name = label, packageName = pkg, icon = icon)
             } else null
         }.distinctBy { it.packageName }.sortedBy { it.name.lowercase() }
     }

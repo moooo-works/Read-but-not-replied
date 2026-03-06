@@ -1,7 +1,7 @@
 package com.mori.notireplyassistant.feature.settings.excluded
 
-import com.mori.notireplyassistant.core.domain.model.AppInfo
-import com.mori.notireplyassistant.core.domain.provider.AppInfoProvider
+import com.mori.notireplyassistant.core.domain.model.InstalledAppUiModel
+import com.mori.notireplyassistant.core.repository.InstalledAppsRepository
 import com.mori.notireplyassistant.core.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,7 +29,7 @@ import org.mockito.junit.MockitoJUnitRunner
 @RunWith(MockitoJUnitRunner::class)
 class ExcludedAppsViewModelTest {
 
-    @Mock private lateinit var appInfoProvider: AppInfoProvider
+    @Mock private lateinit var installedAppsRepository: InstalledAppsRepository
     @Mock private lateinit var settingsRepository: SettingsRepository
 
     private lateinit var viewModel: ExcludedAppsViewModel
@@ -41,13 +41,13 @@ class ExcludedAppsViewModelTest {
         Dispatchers.setMain(testDispatcher)
 
         val apps = listOf(
-            AppInfo("com.app.a", "App A"),
-            AppInfo("com.app.b", "App B")
+            InstalledAppUiModel("App A", "com.app.a", null),
+            InstalledAppUiModel("App B", "com.app.b", null)
         )
-        `when`(appInfoProvider.getInstalledApps()).thenReturn(apps)
+        `when`(installedAppsRepository.getInstalledApps()).thenReturn(apps)
         `when`(settingsRepository.excludedPackagesFlow).thenReturn(mockExcludedFlow)
 
-        viewModel = ExcludedAppsViewModel(appInfoProvider, settingsRepository)
+        viewModel = ExcludedAppsViewModel(installedAppsRepository, settingsRepository)
     }
 
     @After
@@ -89,6 +89,23 @@ class ExcludedAppsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(1, state.size)
         assertEquals("com.app.b", state[0].appInfo.packageName)
+
+        job.cancel()
+    }
+
+    @Test
+    fun searchFiltersList_byPackageName() = runTest(testDispatcher) {
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("com.app.a")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.size)
+        assertEquals("com.app.a", state[0].appInfo.packageName)
 
         job.cancel()
     }
