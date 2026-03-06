@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mori.notireplyassistant.core.database.entity.ReminderEntity
+import com.mori.notireplyassistant.core.domain.model.ReminderUiModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,7 +50,7 @@ fun RemindersScreen(
 
 @Composable
 fun ReminderItem(
-    reminder: ReminderEntity,
+    reminder: ReminderUiModel,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit
 ) {
@@ -60,7 +60,7 @@ fun ReminderItem(
     ListItem(
         headlineContent = {
             Text(
-                text = "Reminder for conversation",
+                text = reminder.conversationTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
